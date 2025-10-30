@@ -1,0 +1,28 @@
+{
+  "name": "hestia-tourism-assistant",
+  "version": "2.0.0",
+  "description": "AI-powered Tourism & Hospitality chatbot for Saint Joseph College",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "chatbot",
+    "tourism",
+    "hospitality",
+    "facebook-messenger",
+    "gemini-ai"
+  ],
+  "author": "Saint Joseph College",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "body-parser": "^1.20.2",
+    "request": "^2.88.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
