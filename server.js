@@ -1,5 +1,5 @@
-// Enhanced Tourism Chatbot with Gemini AI Integration - PRODUCTION FIX
-// Features: Quick Replies, Multi-language Support, AI-powered responses
+// Enhanced Tourism Chatbot with Gemini AI Integration - MERGED VERSION
+// Features: Quick Replies, Multi-language Support, AI-powered responses with Gemini 1.5 Pro
 
 import express from "express";
 import bodyParser from "body-parser";
@@ -16,6 +16,11 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 if (!PAGE_ACCESS_TOKEN) {
   console.error("❌ CRITICAL: PAGE_ACCESS_TOKEN is not set!");
   console.error("Bot will not be able to send messages.");
+}
+
+if (!GEMINI_API_KEY) {
+  console.error("⚠️ WARNING: GEMINI_API_KEY is not set!");
+  console.error("Bot will use fallback keyword matching.");
 }
 
 // Store user language preferences
@@ -171,7 +176,7 @@ function getQuickReplies(language) {
   return replies[language] || replies.english;
 }
 
-// Call Gemini AI with improved error handling
+// Call Gemini AI using Gemini 1.5 Pro
 async function callGeminiAI(userMessage, language) {
   if (!GEMINI_API_KEY) {
     console.log("⚠️ Gemini API key not set, using fallback");
@@ -193,65 +198,52 @@ User question: ${userMessage}
 Response:`;
 
   try {
-    // Use v1beta API with gemini-pro (stable model)
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+    // Use v1 endpoint with gemini-pro for free API
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
     
-    console.log(`🤖 Calling Gemini AI for: "${userMessage}"`);
+    console.log(`🤖 Calling Gemini Pro for: "${userMessage}"`);
     
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json"
+    const response = await axios.post(url, {
+      contents: [{
+        role: "user",
+        parts: [{ text: prompt }]
+      }],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 200,
+        topP: 0.8,
+        topK: 10
       },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: prompt }]
-        }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 200,
-          topP: 0.8,
-          topK: 10
+      safetySettings: [
+        {
+          category: "HARM_CATEGORY_HARASSMENT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
         },
-        safetySettings: [
-          {
-            category: "HARM_CATEGORY_HARASSMENT",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          },
-          {
-            category: "HARM_CATEGORY_HATE_SPEECH",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          },
-          {
-            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          },
-          {
-            category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          }
-        ]
-      })
+        {
+          category: "HARM_CATEGORY_HATE_SPEECH",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        }
+      ]
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Gemini API HTTP ${response.status}:`, errorText.substring(0, 200));
-      return null;
-    }
-
-    const data = await response.json();
-    
-    if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
-      const aiResponse = data.candidates[0].content.parts[0].text.trim();
+    if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+      const aiResponse = response.data.candidates[0].content.parts[0].text.trim();
       console.log(`✅ Gemini response: ${aiResponse.substring(0, 80)}...`);
       return aiResponse;
     } else {
-      console.error("❌ Unexpected Gemini response structure:", JSON.stringify(data).substring(0, 200));
+      console.error("❌ Unexpected Gemini response structure:", JSON.stringify(response.data).substring(0, 200));
       return null;
     }
   } catch (error) {
-    console.error("❌ Gemini API error:", error.message);
+    console.error("❌ Gemini API error:", error.response?.data || error.message);
     return null;
   }
 }
@@ -467,30 +459,24 @@ async function callSendAPI(sender_psid, response) {
   try {
     console.log(`📤 Sending message to ${sender_psid}...`);
     
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(request_body)
-    });
+    const res = await axios.post(url, request_body);
 
-    const data = await res.json();
-    
-    if (data.error) {
-      console.error("❌ Facebook API error:", JSON.stringify(data.error));
-      console.error("Error code:", data.error.code);
-      console.error("Error message:", data.error.message);
+    if (res.data.error) {
+      console.error("❌ Facebook API error:", JSON.stringify(res.data.error));
+      console.error("Error code:", res.data.error.code);
+      console.error("Error message:", res.data.error.message);
       
       // Check for specific errors
-      if (data.error.code === 190) {
+      if (res.data.error.code === 190) {
         console.error("🔑 ACCESS TOKEN ERROR: Your PAGE_ACCESS_TOKEN is invalid or expired!");
-      } else if (data.error.code === 100) {
+      } else if (res.data.error.code === 100) {
         console.error("📋 PARAMETER ERROR: Invalid parameter in request");
       }
     } else {
       console.log(`✅ Message sent successfully to ${sender_psid}`);
     }
   } catch (err) {
-    console.error("❌ Unable to send message:", err.message);
+    console.error("❌ Unable to send message:", err.response?.data || err.message);
     console.error("Stack trace:", err.stack);
   }
 }
@@ -500,7 +486,8 @@ app.get("/", (req, res) => {
   res.json({
     status: "running",
     bot: "Hestia Tourism Assistant",
-    version: "2.1.0",
+    version: "3.0.0-merged",
+    gemini_model: "gemini-1.5-pro",
     gemini_enabled: !!GEMINI_API_KEY,
     page_token_set: !!PAGE_ACCESS_TOKEN
   });
@@ -512,7 +499,8 @@ app.get("/test", (req, res) => {
     verify_token_set: !!VERIFY_TOKEN,
     page_access_token_set: !!PAGE_ACCESS_TOKEN,
     gemini_api_key_set: !!GEMINI_API_KEY,
-    environment: process.env.NODE_ENV || "development"
+    environment: process.env.NODE_ENV || "development",
+    gemini_model: "gemini-1.5-pro"
   });
 });
 
@@ -527,11 +515,17 @@ app.listen(PORT, () => {
   console.log(`✅ Verify token set: ${!!VERIFY_TOKEN}`);
   console.log(`✅ Page access token set: ${!!PAGE_ACCESS_TOKEN}`);
   console.log(`🤖 Gemini AI enabled: ${!!GEMINI_API_KEY}`);
+  console.log(`🧠 Gemini Model: gemini-1.5-pro`);
   console.log("=".repeat(50) + "\n");
   
   if (!PAGE_ACCESS_TOKEN) {
     console.error("⚠️  WARNING: PAGE_ACCESS_TOKEN not set!");
     console.error("⚠️  Bot will NOT be able to send messages!");
     console.error("⚠️  Set it in your environment variables.\n");
+  }
+  
+  if (!GEMINI_API_KEY) {
+    console.error("⚠️  WARNING: GEMINI_API_KEY not set!");
+    console.error("⚠️  Bot will use fallback keyword matching only.\n");
   }
 });
