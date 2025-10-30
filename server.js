@@ -196,7 +196,8 @@ function getQuickReplies(language) {
       { title: "Careers", payload: "CAREERS" },
       { title: "Thesis", payload: "THESIS" },
       { title: "Instructors", payload: "INSTRUCTORS" },
-      { title: "Location", payload: "LOCATION" }
+      { title: "Location", payload: "LOCATION" },
+      { title: "More Inquiries", payload: "MORE_INQUIRIES" }
     ],
     bisaya: [
       { title: "Mga Programa", payload: "PROGRAMS" },
@@ -208,7 +209,8 @@ function getQuickReplies(language) {
       { title: "Trabaho", payload: "CAREERS" },
       { title: "Thesis", payload: "THESIS" },
       { title: "Instructors", payload: "INSTRUCTORS" },
-      { title: "Lokasyon", payload: "LOCATION" }
+      { title: "Lokasyon", payload: "LOCATION" },
+      { title: "Dugang Pangutana", payload: "MORE_INQUIRIES" }
     ],
     tagalog: [
       { title: "Mga Programa", payload: "PROGRAMS" },
@@ -220,7 +222,8 @@ function getQuickReplies(language) {
       { title: "Trabaho", payload: "CAREERS" },
       { title: "Thesis", payload: "THESIS" },
       { title: "Instructors", payload: "INSTRUCTORS" },
-      { title: "Lokasyon", payload: "LOCATION" }
+      { title: "Lokasyon", payload: "LOCATION" },
+      { title: "Iba Pang Tanong", payload: "MORE_INQUIRIES" }
     ]
   };
   
@@ -266,8 +269,9 @@ YOUR RESPONSE:`;
       continue;
     }
 
-    // Skip basic model if we haven't tried all Gemini models yet
-    if (model.type === 'basic' && i < AI_MODELS.length - 1) {
+    // Skip basic model - it's for keyword fallback only
+    if (model.type === 'basic') {
+      console.log(`⏭️ Skipping basic model, will use keyword fallback`);
       continue;
     }
 
@@ -307,12 +311,12 @@ YOUR RESPONSE:`;
           }
         ]
       }, {
-        timeout: 10000 // 10 second timeout
+        timeout: 15000 // 15 second timeout for longer responses
       });
 
       if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
         const aiResponse = response.data.candidates[0].content.parts[0].text.trim();
-        console.log(`✅ Success with ${model.name}: ${aiResponse.substring(0, 80)}...`);
+        console.log(`✅ Success with ${model.name}: ${aiResponse.substring(0, 100)}...`);
         
         // Reset to this working model for next requests
         currentModelIndex = i;
@@ -326,12 +330,26 @@ YOUR RESPONSE:`;
       const failCount = (modelFailCount.get(model.name) || 0) + 1;
       modelFailCount.set(model.name, failCount);
       
-      console.error(`❌ Model ${model.name} failed (attempt ${failCount}):`, 
-        error.response?.data?.error?.message || error.message);
+      // Check if it's a rate limit error (429) or quota error (429/403)
+      const isRateLimitError = error.response?.status === 429 || 
+                               error.response?.data?.error?.status === 'RESOURCE_EXHAUSTED' ||
+                               error.response?.data?.error?.message?.includes('quota') ||
+                               error.response?.data?.error?.message?.includes('limit');
       
-      // If this model has failed 3 times, move to next model
-      if (failCount >= 3 && i < AI_MODELS.length - 1) {
-        console.log(`⏭️ Moving to next model after 3 failures`);
+      if (isRateLimitError) {
+        console.error(`⚠️ Model ${model.name} RATE LIMIT/QUOTA EXCEEDED - trying next model`);
+      } else {
+        console.error(`❌ Model ${model.name} failed (attempt ${failCount}):`, 
+          error.response?.data?.error?.message || error.message);
+      }
+      
+      // Move to next model immediately on rate limit, or after 3 failures for other errors
+      if (isRateLimitError || (failCount >= 3 && i < AI_MODELS.length - 1)) {
+        if (isRateLimitError) {
+          console.log(`⏭️ Rate limit detected - switching to next model immediately`);
+        } else {
+          console.log(`⏭️ Moving to next model after ${failCount} failures`);
+        }
         currentModelIndex = i + 1;
       }
       
@@ -340,8 +358,8 @@ YOUR RESPONSE:`;
     }
   }
 
-  // All models failed
-  console.error("❌ All AI models failed, using fallback");
+  // All AI models failed or hit limits - return null to trigger keyword fallback
+  console.error("❌ All AI models exhausted - switching to keyword fallback system");
   return null;
 }
 
@@ -408,6 +426,11 @@ async function handlePostback(sender_psid, payload) {
       english: "📍 We're located at:\n\nSaint Joseph College\nTunga-Tunga, Maasin City\nSouthern Leyte, Philippines\n\nVisit us to learn more about our programs!",
       bisaya: "📍 Naa mi sa:\n\nSaint Joseph College\nTunga-Tunga, Maasin City\nSouthern Leyte, Philippines\n\nBisita mi aron makahibalo og dugang bahin sa among programs!",
       tagalog: "📍 Nandito kami sa:\n\nSaint Joseph College\nTunga-Tunga, Maasin City\nSouthern Leyte, Philippines\n\nBisitahin kami para malaman ang higit pa tungkol sa aming programs!"
+    },
+    MORE_INQUIRIES: {
+      english: "📧 MORE INQUIRIES:\n\nFor additional inquiries, please send us a detailed message here.\n\nOur admin team will review it and get back to you as soon as possible.\n\nWe appreciate your patience and look forward to assisting you further! 😊\n\nThank you for your interest in our Tourism & Hospitality programs!",
+      bisaya: "📧 DUGANG MGA PANGUTANA:\n\nPara sa dugang nga mga pangutana, palihug ipadala kanamo ang detalyado nga mensahe dinhi.\n\nAng among admin team mo-review niini ug mobalik kaninyo sa labing madali.\n\nSalamat sa inyong pagpailob ug nag-antabay mi nga matabangan mo pa! 😊\n\nSalamat sa inyong interes sa among Tourism & Hospitality programs!",
+      tagalog: "📧 IBA PANG MGA TANONG:\n\nPara sa karagdagang mga katanungan, mangyaring magpadala ng detalyadong mensahe dito.\n\nAng aming admin team ay mag-review nito at babalik sa inyo sa lalong madaling panahon.\n\nPinahahalagahan namin ang inyong pasensya at inaasahan naming matulungan kayo pa! 😊\n\nSalamat sa inyong interes sa aming Tourism & Hospitality programs!"
     }
   };
 
@@ -461,11 +484,13 @@ async function handleMessage(sender_psid, text) {
   if (geminiResponse) {
     console.log("✅ Using Gemini AI response");
     await sendMessage(sender_psid, geminiResponse, language);
-  } else {
-    // Fallback to keyword-based responses
-    console.log("⚠️ Gemini unavailable, using keyword matching");
-    
-    const keywordResponses = {
+    return; // Exit here - AI handled the response successfully
+  }
+  
+  // AI failed or hit limits - use keyword-based fallback
+  console.log("⚠️ AI unavailable - activating keyword fallback system");
+  
+  const keywordResponses = {
       english: {
         program: "We offer two excellent programs at Saint Joseph College:\n\n🎓 BSTM (Bachelor of Science in Tourism Management)\nFocuses on airlines, travel agencies, tour guiding, events, and destinations. Perfect for those passionate about travel and tourism!\n\n🍽️ BSHM (Bachelor of Science in Hospitality Management)\nFocuses on hotels, restaurants, cooking, events, and customer service. Ideal for future hotel managers and culinary professionals!\n\nBoth programs include practical training, industry partnerships, and exciting career opportunities!",
         cost: "Additional costs to consider for our Tourism & Hospitality programs:\n\n💰 EXPENSES:\n• Lab Uniform - Required for practical training\n• Culinary ingredients - For cooking classes and practicals\n• Event participation fees (MICE) - Multi-day competitions and events\n• OJT requirements - For on-the-job training\n\nThese costs vary depending on your chosen program and activities. Our programs offer great value with hands-on training and industry connections!",
