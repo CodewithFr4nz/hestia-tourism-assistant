@@ -193,7 +193,8 @@ Response:`;
 
   try {
     // Use v1beta API with gemini-pro (stable model)
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${GEMINI_API_KEY}`;
+
     
     console.log(`🤖 Calling Gemini AI for: "${userMessage}"`);
     
@@ -534,3 +535,4 @@ app.listen(PORT, () => {
     console.error("⚠️  Set it in your environment variables.\n");
   }
 });
+
