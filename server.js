@@ -704,5 +704,4 @@ app.listen(PORT, () => {
     console.log(`📝 Primary model: ${AI_MODELS[0].name}`);
     console.log(`🔄 Fallback models: ${AI_MODELS.slice(1).map(m => m.name).join(', ')}\n`);
   }
-});3535353535
-
+});
