@@ -225,13 +225,22 @@ async function callGeminiAI(userMessage, language) {
     tagalog: "Respond in Tagalog"
   }[language] || "Respond in English";
 
-  const prompt = `${KNOWLEDGE_BASE}
+  const prompt = `You are Hestia, the Tourism & Hospitality Department assistant at Saint Joseph College.
 
-${languageInstruction}. Keep responses concise (2-3 sentences max) and professional.
+CONTEXT INFORMATION:
+${KNOWLEDGE_BASE}
 
-User question: ${userMessage}
+INSTRUCTIONS:
+- ${languageInstruction}
+- Be helpful, friendly, and professional
+- Provide complete, informative answers
+- If the question is about programs, partnerships, events, costs, etc., give detailed information
+- Keep responses conversational but comprehensive
+- Use emojis appropriately to make responses engaging
 
-Response:`;
+USER QUESTION: ${userMessage}
+
+YOUR RESPONSE:`;
 
   // Try each model in sequence until one works
   for (let i = currentModelIndex; i < AI_MODELS.length; i++) {
