@@ -269,9 +269,9 @@ YOUR RESPONSE:`;
         }],
         generationConfig: {
           temperature: 0.7,
-          maxOutputTokens: 200,
-          topP: 0.8,
-          topK: 10
+          maxOutputTokens: 5000,
+          topP: 0.9,
+          topK: 40
         },
         safetySettings: [
           {
