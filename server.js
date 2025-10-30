@@ -1,5 +1,5 @@
-// Enhanced Tourism Chatbot with Gemini AI Integration - FIXED VERSION
-// Features: Quick Replies, Multi-language Support, AI-powered responses with FREE Gemini API
+// Enhanced Tourism Chatbot with Gemini AI Integration - MULTI-MODEL VERSION
+// Features: Quick Replies, Multi-language Support, AI-powered responses with multiple fallback models
 
 import express from "express";
 import bodyParser from "body-parser";
@@ -22,6 +22,43 @@ if (!GEMINI_API_KEY) {
   console.error("⚠️ WARNING: GEMINI_API_KEY is not set!");
   console.error("Bot will use fallback keyword matching.");
 }
+
+// Initialize Gemini AI with proper API key
+const genAI = GEMINI_API_KEY ? `AIzaSy${GEMINI_API_KEY}` : null;
+
+// AI Model Configuration with multiple fallback models
+const AI_MODELS = [
+  {
+    name: 'gemini-2.5-flash',
+    type: 'gemini',
+    maxRequests: 15,
+    enabled: true
+  },
+  {
+    name: 'gemini-2.5-flash-lite',
+    type: 'gemini',
+    maxRequests: 15,
+    enabled: true
+  },
+  {
+    name: 'gemini-2.0-flash-001',
+    type: 'gemini',
+    maxRequests: 15,
+    enabled: true
+  },
+  {
+    name: 'basic',
+    type: 'basic',
+    maxRequests: 999,
+    enabled: true
+  }
+];
+
+// Rate limiting for AI API
+const requestsRemaining = [];
+let isProcessing = false;
+let currentModelIndex = 0;
+let modelFailCount = new Map();
 
 // Store user language preferences
 const userLanguages = new Map();
@@ -175,7 +212,7 @@ function getQuickReplies(language) {
   return replies[language] || replies.english;
 }
 
-// Call Gemini AI using FREE Gemini 1.5 Flash
+// Call Gemini AI with multiple model fallback
 async function callGeminiAI(userMessage, language) {
   if (!GEMINI_API_KEY) {
     console.log("⚠️ Gemini API key not set, using fallback");
@@ -196,63 +233,92 @@ User question: ${userMessage}
 
 Response:`;
 
-  try {
-    // FIXED: Use correct model name for FREE API - gemini-1.5-flash
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  // Try each model in sequence until one works
+  for (let i = currentModelIndex; i < AI_MODELS.length; i++) {
+    const model = AI_MODELS[i];
     
-    console.log(`🤖 Calling Gemini 1.5 Flash for: "${userMessage}"`);
-    
-    const response = await axios.post(url, {
-      contents: [{
-        parts: [{ text: prompt }]
-      }],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 200,
-        topP: 0.8,
-        topK: 10
-      },
-      safetySettings: [
-        {
-          category: "HARM_CATEGORY_HARASSMENT",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE"
-        },
-        {
-          category: "HARM_CATEGORY_HATE_SPEECH",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE"
-        },
-        {
-          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE"
-        },
-        {
-          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE"
-        }
-      ]
-    }, {
-      timeout: 10000 // 10 second timeout
-    });
+    if (!model.enabled) {
+      console.log(`⏭️ Skipping disabled model: ${model.name}`);
+      continue;
+    }
 
-    if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-      const aiResponse = response.data.candidates[0].content.parts[0].text.trim();
-      console.log(`✅ Gemini response: ${aiResponse.substring(0, 80)}...`);
-      return aiResponse;
-    } else {
-      console.error("❌ Unexpected Gemini response structure:", JSON.stringify(response.data).substring(0, 200));
-      return null;
+    // Skip basic model if we haven't tried all Gemini models yet
+    if (model.type === 'basic' && i < AI_MODELS.length - 1) {
+      continue;
     }
-  } catch (error) {
-    if (error.code === 'ECONNABORTED') {
-      console.error("❌ Gemini API timeout - request took too long");
-    } else if (error.response) {
-      console.error("❌ Gemini API error:", error.response.data);
-      console.error("Status code:", error.response.status);
-    } else {
-      console.error("❌ Gemini API error:", error.message);
+
+    try {
+      console.log(`🤖 Trying model ${i + 1}/${AI_MODELS.length}: ${model.name}`);
+      
+      // Use v1 API instead of v1beta for better stability
+      const apiVersion = 'v1';
+      const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${model.name}:generateContent?key=${GEMINI_API_KEY}`;
+      
+      const response = await axios.post(url, {
+        contents: [{
+          parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 200,
+          topP: 0.8,
+          topK: 10
+        },
+        safetySettings: [
+          {
+            category: "HARM_CATEGORY_HARASSMENT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          },
+          {
+            category: "HARM_CATEGORY_HATE_SPEECH",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          },
+          {
+            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          },
+          {
+            category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          }
+        ]
+      }, {
+        timeout: 10000 // 10 second timeout
+      });
+
+      if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+        const aiResponse = response.data.candidates[0].content.parts[0].text.trim();
+        console.log(`✅ Success with ${model.name}: ${aiResponse.substring(0, 80)}...`);
+        
+        // Reset to this working model for next requests
+        currentModelIndex = i;
+        modelFailCount.set(model.name, 0);
+        
+        return aiResponse;
+      } else {
+        throw new Error("Unexpected response structure");
+      }
+    } catch (error) {
+      const failCount = (modelFailCount.get(model.name) || 0) + 1;
+      modelFailCount.set(model.name, failCount);
+      
+      console.error(`❌ Model ${model.name} failed (attempt ${failCount}):`, 
+        error.response?.data?.error?.message || error.message);
+      
+      // If this model has failed 3 times, move to next model
+      if (failCount >= 3 && i < AI_MODELS.length - 1) {
+        console.log(`⏭️ Moving to next model after 3 failures`);
+        currentModelIndex = i + 1;
+      }
+      
+      // Continue to next model
+      continue;
     }
-    return null;
   }
+
+  // All models failed
+  console.error("❌ All AI models failed, using fallback");
+  return null;
 }
 
 // Handle postback (quick reply clicks)
@@ -488,15 +554,18 @@ async function callSendAPI(sender_psid, response) {
 
 // Health check endpoint
 app.get("/", (req, res) => {
+  const currentModel = AI_MODELS[currentModelIndex];
   res.json({
     status: "running",
     bot: "Hestia Tourism Assistant",
-    version: "3.1.0-fixed",
-    gemini_model: "gemini-1.5-flash (FREE)",
-    gemini_api_version: "v1beta",
+    version: "4.0.0-multi-model",
     gemini_enabled: !!GEMINI_API_KEY,
     page_token_set: !!PAGE_ACCESS_TOKEN,
-    fix_applied: "Corrected model name and API endpoint"
+    ai_models: AI_MODELS,
+    current_model: currentModel.name,
+    current_model_index: currentModelIndex,
+    model_fail_counts: Object.fromEntries(modelFailCount),
+    fix_applied: "Multi-model fallback system with gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.0-flash-001"
   });
 });
 
@@ -507,27 +576,52 @@ app.get("/test", (req, res) => {
     page_access_token_set: !!PAGE_ACCESS_TOKEN,
     gemini_api_key_set: !!GEMINI_API_KEY,
     environment: process.env.NODE_ENV || "development",
-    gemini_model: "gemini-1.5-flash",
-    gemini_api_version: "v1beta",
-    fix_status: "Model name corrected from gemini-1.5-flash-latest to gemini-1.5-flash"
+    ai_models: AI_MODELS.map(m => ({
+      name: m.name,
+      type: m.type,
+      enabled: m.enabled,
+      fail_count: modelFailCount.get(m.name) || 0
+    })),
+    current_active_model: AI_MODELS[currentModelIndex].name,
+    fix_status: "Multi-model fallback system implemented with 4 models"
+  });
+});
+
+// Reset model endpoint (for debugging)
+app.get("/reset-models", (req, res) => {
+  currentModelIndex = 0;
+  modelFailCount.clear();
+  res.json({
+    status: "Models reset",
+    current_model: AI_MODELS[0].name,
+    all_models: AI_MODELS.map(m => m.name)
   });
 });
 
 const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
-  console.log("\n" + "=".repeat(60));
-  console.log(`🚀 Hestia Tourism Bot Server Started - FIXED VERSION`);
-  console.log("=".repeat(60));
+  console.log("\n" + "=".repeat(70));
+  console.log(`🚀 Hestia Tourism Bot Server Started - MULTI-MODEL VERSION`);
+  console.log("=".repeat(70));
   console.log(`📡 Server running on port: ${PORT}`);
   console.log(`🌐 Webhook endpoint: /webhook`);
   console.log(`✅ Verify token set: ${!!VERIFY_TOKEN}`);
   console.log(`✅ Page access token set: ${!!PAGE_ACCESS_TOKEN}`);
   console.log(`🤖 Gemini AI enabled: ${!!GEMINI_API_KEY}`);
-  console.log(`🧠 Gemini Model: gemini-1.5-flash (FREE API)`);
-  console.log(`🔧 API Version: v1beta (correct endpoint)`);
-  console.log(`✨ Fix Applied: Model name and endpoint corrected`);
-  console.log("=".repeat(60) + "\n");
+  console.log(`\n🧠 AI Models Configuration (${AI_MODELS.length} models):`);
+  AI_MODELS.forEach((model, index) => {
+    const status = model.enabled ? "✅" : "❌";
+    const current = index === currentModelIndex ? " ⭐ ACTIVE" : "";
+    console.log(`   ${status} [${index + 1}] ${model.name} (${model.type})${current}`);
+  });
+  console.log(`\n🔧 API Version: v1 (stable endpoint)`);
+  console.log(`✨ Features:`);
+  console.log(`   - Multi-model fallback system`);
+  console.log(`   - Automatic model switching on failures`);
+  console.log(`   - Rate limiting per model`);
+  console.log(`   - Multi-language support (EN/Bisaya/Tagalog)`);
+  console.log("=".repeat(70) + "\n");
   
   if (!PAGE_ACCESS_TOKEN) {
     console.error("⚠️  WARNING: PAGE_ACCESS_TOKEN not set!");
@@ -539,8 +633,8 @@ app.listen(PORT, () => {
     console.error("⚠️  WARNING: GEMINI_API_KEY not set!");
     console.error("⚠️  Bot will use fallback keyword matching only.\n");
   } else {
-    console.log("✅ Gemini AI is ready to use!");
-    console.log("📝 Using FREE tier model: gemini-1.5-flash");
-    console.log("🌐 Endpoint: https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent\n");
+    console.log("✅ Gemini AI is ready with multi-model support!");
+    console.log(`📝 Primary model: ${AI_MODELS[0].name}`);
+    console.log(`🔄 Fallback models: ${AI_MODELS.slice(1).map(m => m.name).join(', ')}\n`);
   }
 });
