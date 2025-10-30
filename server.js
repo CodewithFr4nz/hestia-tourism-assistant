@@ -192,7 +192,8 @@ User question: ${userMessage}
 Response:`;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    // Use v1 API endpoint (not v1beta) with correct model name
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
     
     console.log(`🤖 Calling Gemini AI for: "${userMessage}"`);
     
@@ -218,6 +219,14 @@ Response:`;
           },
           {
             category: "HARM_CATEGORY_HATE_SPEECH",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          },
+          {
+            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          },
+          {
+            category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
             threshold: "BLOCK_MEDIUM_AND_ABOVE"
           }
         ]
