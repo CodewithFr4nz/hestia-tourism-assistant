@@ -192,8 +192,8 @@ User question: ${userMessage}
 Response:`;
 
   try {
-    // Use v1 API endpoint (not v1beta) with correct model name
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    // Use v1beta API with gemini-pro (stable model)
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
     
     console.log(`🤖 Calling Gemini AI for: "${userMessage}"`);
     
