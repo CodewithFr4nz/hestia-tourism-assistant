@@ -1,14 +1,8 @@
-// Enhanced Tourism Chatbot with Gemini AI Integration
+// Enhanced Tourism Chatbot with Gemini AI Integration - FIXED VERSION
 // Features: Quick Replies, Multi-language Support, AI-powered responses
-// 
-// Required Environment Variables:
-// - VERIFY_TOKEN: Your webhook verification token
-// - PAGE_ACCESS_TOKEN: Your Facebook Page access token  
-// - GEMINI_API_KEY: Your Google Gemini API key (get from https://makersuite.google.com/app/apikey)
 
 import express from "express";
 import bodyParser from "body-parser";
-import request from "request";
 
 const app = express();
 app.use(bodyParser.json());
@@ -16,6 +10,9 @@ app.use(bodyParser.json());
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "sjcverify123";
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+// Store user language preferences
+const userLanguages = new Map();
 
 // Knowledge base for Gemini AI context
 const KNOWLEDGE_BASE = `
@@ -83,29 +80,28 @@ app.get("/webhook", (req, res) => {
 app.post("/webhook", (req, res) => {
   const body = req.body;
 
-if (body.object === "page") {
-  body.entry.forEach((entry) => {
-    // Loop through all messaging events instead of only [0]
-    entry.messaging.forEach((event) => {
-      const sender = event.sender.id;
+  if (body.object === "page") {
+    body.entry.forEach((entry) => {
+      entry.messaging.forEach((event) => {
+        const sender = event.sender.id;
 
-      if (event.message && event.message.text) {
-        handleMessage(sender, event.message.text);
-      } else if (event.postback) {
-        handlePostback(sender, event.postback.payload);
-      }
+        if (event.message && event.message.text) {
+          handleMessage(sender, event.message.text);
+        } else if (event.postback) {
+          handlePostback(sender, event.postback.payload);
+        }
+      });
     });
-  });
-  res.status(200).send("EVENT_RECEIVED");
-} else {
-  res.sendStatus(404);
-}
+    res.status(200).send("EVENT_RECEIVED");
+  } else {
+    res.sendStatus(404);
+  }
 });
 
 // Language detection
 function detectLanguage(text) {
-  const bisayaKeywords = ['kumusta', 'musta', 'unsa', 'asa', 'kanus-a', 'ngano', 'kinsa', 'unsaon', 'pila'];
-  const tagalogKeywords = ['kumusta', 'kamusta', 'ano', 'saan', 'kailan', 'bakit', 'sino', 'paano', 'ilan', 'mga', 'ang', 'ng', 'sa'];
+  const bisayaKeywords = ['kumusta', 'musta', 'unsa', 'asa', 'kanus-a', 'ngano', 'kinsa', 'unsaon', 'pila', 'naa', 'wala', 'adunay'];
+  const tagalogKeywords = ['kumusta', 'kamusta', 'ano', 'saan', 'kailan', 'bakit', 'sino', 'paano', 'ilan', 'mga', 'ang', 'ng', 'sa', 'may', 'wala'];
   
   const textLower = text.toLowerCase();
   const isBisaya = bisayaKeywords.some(k => textLower.includes(k));
@@ -114,7 +110,7 @@ function detectLanguage(text) {
   return isBisaya ? 'bisaya' : isTagalog ? 'tagalog' : 'english';
 }
 
-// Get quick replies based on language (10 buttons total)
+// Get quick replies based on language
 function getQuickReplies(language) {
   const replies = {
     english: [
@@ -158,10 +154,10 @@ function getQuickReplies(language) {
   return replies[language] || replies.english;
 }
 
-// Call Gemini AI
+// Call Gemini AI - FIXED VERSION
 async function callGeminiAI(userMessage, language) {
   if (!GEMINI_API_KEY) {
-    console.error("❌ Gemini API key not set");
+    console.log("⚠️ Gemini API key not set, using fallback");
     return null;
   }
 
@@ -195,21 +191,32 @@ Response:`;
       }
     );
 
+    if (!response.ok) {
+      console.error(`❌ Gemini API HTTP error: ${response.status}`);
+      return null;
+    }
+
     const data = await response.json();
     
     if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
-      return data.candidates[0].content.parts[0].text.trim();
+      const aiResponse = data.candidates[0].content.parts[0].text.trim();
+      console.log(`✅ Gemini response: ${aiResponse.substring(0, 50)}...`);
+      return aiResponse;
+    } else {
+      console.error("❌ Unexpected Gemini response format:", JSON.stringify(data));
+      return null;
     }
-    
-    return null;
   } catch (error) {
-    console.error("❌ Gemini API error:", error);
+    console.error("❌ Gemini API error:", error.message);
     return null;
   }
 }
 
-// Handle postback (quick reply clicks)
+// Handle postback (quick reply clicks) - FIXED VERSION
 function handlePostback(sender_psid, payload) {
+  // Get stored language or default to English
+  const language = userLanguages.get(sender_psid) || 'english';
+  
   const responses = {
     PROGRAMS: {
       english: "We offer two programs:\n\nBSTM - Bachelor of Science in Tourism Management\nFocuses on airlines, travel agencies, tour guiding, events, and destinations.\n\nBSHM - Bachelor of Science in Hospitality Management\nFocuses on hotels, restaurants, cooking, events, and customer service.",
@@ -217,60 +224,76 @@ function handlePostback(sender_psid, payload) {
       tagalog: "May dalawang programa:\n\nBSTM - Bachelor of Science in Tourism Management\nNakatuon sa airlines, travel agencies, tour guiding, events, at destinations.\n\nBSHM - Bachelor of Science in Hospitality Management\nNakatuon sa hotels, restaurants, cooking, events, at customer service."
     },
     PARTNERSHIPS: {
-      english: "We have partnerships with Air Asia and many industry leaders:\n\nBayfront Cebu, Bohol Bee Farm, Discovery Prime Makati, Department of Tourism Manila, Ecoscape Travel & Tours, Fuente Pension House, Fuente Hotel de Cebu, Hotel Celeste Makati, Jeju Air, Nustar Resort and Casino, Tambuli Seaside Resort and Spa, The Mark Resort Cebu, Waterfront Mactan/Lahug, and more.",
-      bisaya: "Adunay partnerships sa Air Asia ug daghan pang industry leaders:\n\nBayfront Cebu, Bohol Bee Farm, Discovery Prime Makati, Department of Tourism Manila, Ecoscape Travel & Tours, Fuente Pension House, Fuente Hotel de Cebu, Hotel Celeste Makati, Jeju Air, Nustar Resort and Casino, Tambuli Seaside Resort and Spa, The Mark Resort Cebu, Waterfront Mactan/Lahug, ug uban pa.",
-      tagalog: "May partnerships sa Air Asia at marami pang industry leaders:\n\nBayfront Cebu, Bohol Bee Farm, Discovery Prime Makati, Department of Tourism Manila, Ecoscape Travel & Tours, Fuente Pension House, Fuente Hotel de Cebu, Hotel Celeste Makati, Jeju Air, Nustar Resort and Casino, Tambuli Seaside Resort and Spa, The Mark Resort Cebu, Waterfront Mactan/Lahug, at iba pa."
+      english: "We have partnerships with Air Asia and many industry leaders:\n\nBayfront Cebu, Bohol Bee Farm, Discovery Prime Makati, Department of Tourism Manila, Ecoscape Travel & Tours, Fuente Pension House, Hotel Celeste Makati, Jeju Air, Nustar Resort, Tambuli Seaside Resort, The Mark Resort Cebu, Waterfront Mactan/Lahug, and more.",
+      bisaya: "Adunay partnerships sa Air Asia ug daghan pang industry leaders:\n\nBayfront Cebu, Bohol Bee Farm, Discovery Prime Makati, Department of Tourism Manila, Ecoscape Travel & Tours, Fuente Pension House, Hotel Celeste Makati, Jeju Air, Nustar Resort, Tambuli Seaside Resort, The Mark Resort Cebu, Waterfront Mactan/Lahug, ug uban pa.",
+      tagalog: "May partnerships sa Air Asia at marami pang industry leaders:\n\nBayfront Cebu, Bohol Bee Farm, Discovery Prime Makati, Department of Tourism Manila, Ecoscape Travel & Tours, Fuente Pension House, Hotel Celeste Makati, Jeju Air, Nustar Resort, Tambuli Seaside Resort, The Mark Resort Cebu, Waterfront Mactan/Lahug, at iba pa."
     },
     EVENTS: {
       english: "The department organizes multi-day events featuring competitions like bartending, market basket, tray relay, housekeeping, airline voice over, tour guiding/vlogging, and hair & makeup.",
-      bisaya: "Ang department nag-organize og multi-day event nga adunay competitions sama sa bartending, market basket, tray relay, housekeeping, airline voice over, tour guiding/vlogging, ug hair & makeup.",
-      tagalog: "Ang department ay nag-organize ng multi-day event na may competitions tulad ng bartending, market basket, tray relay, housekeeping, airline voice over, tour guiding/vlogging, at hair & makeup."
+      bisaya: "Ang department nag-organize og multi-day events nga adunay competitions sama sa bartending, market basket, tray relay, housekeeping, airline voice over, tour guiding/vlogging, ug hair & makeup.",
+      tagalog: "Ang department ay nag-organize ng multi-day events na may competitions tulad ng bartending, market basket, tray relay, housekeeping, airline voice over, tour guiding/vlogging, at hair & makeup."
     },
     TRAINING: {
       english: "Labs and simulations in both programs, plus internships via industry partners to give you real-world experience in professional environments.",
-      bisaya: "Labs ug simulations sa duha ka programa, plus internships pinaagi sa industry partners aron makakuha mo og real-world experience sa professional environments.",
+      bisaya: "Labs ug simulations sa duha ka programa, plus internships pinaagi sa industry partners aron makakuha ka og real-world experience sa professional environments.",
       tagalog: "Labs at simulations sa dalawang programa, plus internships sa pamamagitan ng industry partners upang makakuha kayo ng real-world experience sa professional environments."
     },
     COSTS: {
-      english: "Additional expenses for Lab Uniform, culinary ingredients, Event participation fees (MICE), and OJT requirements.",
-      bisaya: "Additional expenses para sa Lab Uniform, culinary ingredients, Event participation fees (MICE), ug OJT requirements.",
-      tagalog: "Karagdagang gastos para sa Lab Uniform, culinary ingredients, Event participation fees (MICE), at OJT requirements."
+      english: "Additional expenses include:\n• Lab Uniform\n• Culinary ingredients\n• Event participation fees (MICE)\n• OJT requirements",
+      bisaya: "Additional expenses naglakip sa:\n• Lab Uniform\n• Culinary ingredients\n• Event participation fees (MICE)\n• OJT requirements",
+      tagalog: "Karagdagang gastos ay kinabibilangan ng:\n• Lab Uniform\n• Culinary ingredients\n• Event participation fees (MICE)\n• OJT requirements"
+    },
+    ACADEMIC: {
+      english: "Academic content includes:\n• Heavy memorization (maps, cultures)\n• System training (Amadeus, Property Management System)\n• Event planning (MICE)\n• Practical labs and simulations",
+      bisaya: "Academic content naglakip sa:\n• Heavy memorization (maps, cultures)\n• System training (Amadeus, Property Management System)\n• Event planning (MICE)\n• Practical labs ug simulations",
+      tagalog: "Academic content ay kinabibilangan ng:\n• Heavy memorization (maps, cultures)\n• System training (Amadeus, Property Management System)\n• Event planning (MICE)\n• Practical labs at simulations"
     },
     CAREERS: {
-      english: "BSTM graduates can become:\nTravel or tour agents, flight attendants, tourism officers, event organizers\n\nBSHM graduates can become:\nHotel or resort managers, chefs or kitchen supervisors, front desk managers, F&B supervisors",
-      bisaya: "BSTM graduates makahimong:\nTravel o tour agents, flight attendants, tourism officers, event organizers\n\nBSHM graduates makahimong:\nHotel o resort managers, chefs o kitchen supervisors, front desk managers, F&B supervisors",
-      tagalog: "BSTM graduates ay maaaring maging:\nTravel o tour agents, flight attendants, tourism officers, event organizers\n\nBSHM graduates ay maaaring maging:\nHotel o resort managers, chefs o kitchen supervisors, front desk managers, F&B supervisors"
+      english: "BSTM graduates can become:\n• Travel or tour agents\n• Flight attendants\n• Tourism officers\n• Event organizers\n\nBSHM graduates can become:\n• Hotel or resort managers\n• Chefs or kitchen supervisors\n• Front desk managers\n• F&B supervisors",
+      bisaya: "BSTM graduates makahimong:\n• Travel o tour agents\n• Flight attendants\n• Tourism officers\n• Event organizers\n\nBSHM graduates makahimong:\n• Hotel o resort managers\n• Chefs o kitchen supervisors\n• Front desk managers\n• F&B supervisors",
+      tagalog: "BSTM graduates ay maaaring maging:\n• Travel o tour agents\n• Flight attendants\n• Tourism officers\n• Event organizers\n\nBSHM graduates ay maaaring maging:\n• Hotel o resort managers\n• Chefs o kitchen supervisors\n• Front desk managers\n• F&B supervisors"
+    },
+    THESIS: {
+      english: "Yes, thesis is required! It's usually completed in your 3rd or 4th year as part of the degree requirements.",
+      bisaya: "Oo, kinahanglan ang thesis! Kini usually makompleto sa inyong 3rd o 4th year isip parte sa degree requirements.",
+      tagalog: "Oo, kailangan ang thesis! Ito ay karaniwang nakukumpleto sa inyong 3rd o 4th year bilang bahagi ng degree requirements."
     },
     INSTRUCTORS: {
-      english: "Full-time instructors:\nXaviera Colleen De Paz, Jazfer Jadd Sala, Angeline Manliguez, Euzarn Cuaton, Wayne Clerigo, Perlita Gerona, Eva Palero, Rachel Mamado, Trisha Louraine De La Torre\n\nPart-time instructors:\nJovanni Christian Plateros, Ruby De la Torre, Paz Belen Mariño, Rafael Bachanicha, Fr. Allan Igbalic, Fr. Emerson Nazareth, Fr. Mark Ortega",
-      bisaya: "Full-time instructors:\nXaviera Colleen De Paz, Jazfer Jadd Sala, Angeline Manliguez, Euzarn Cuaton, Wayne Clerigo, Perlita Gerona, Eva Palero, Rachel Mamado, Trisha Louraine De La Torre\n\nPart-time instructors:\nJovanni Christian Plateros, Ruby De la Torre, Paz Belen Mariño, Rafael Bachanicha, Fr. Allan Igbalic, Fr. Emerson Nazareth, Fr. Mark Ortega",
-      tagalog: "Full-time instructors:\nXaviera Colleen De Paz, Jazfer Jadd Sala, Angeline Manliguez, Euzarn Cuaton, Wayne Clerigo, Perlita Gerona, Eva Palero, Rachel Mamado, Trisha Louraine De La Torre\n\nPart-time instructors:\nJovanni Christian Plateros, Ruby De la Torre, Paz Belen Mariño, Rafael Bachanicha, Fr. Allan Igbalic, Fr. Emerson Nazareth, Fr. Mark Ortega"
+      english: "Our Dean: Rosalinda C. Jomoc, DDM-ET\n\nFull-time instructors:\nXaviera Colleen De Paz, Jazfer Jadd Sala, Angeline Manliguez, Euzarn Cuaton, Wayne Clerigo, Perlita Gerona, Eva Palero, Rachel Mamado, Trisha Louraine De La Torre\n\nPart-time instructors:\nJovanni Christian Plateros, Ruby De la Torre, Paz Belen Mariño, Rafael Bachanicha, Fr. Allan Igbalic, Fr. Emerson Nazareth, Fr. Mark Ortega",
+      bisaya: "Ang among Dean: Rosalinda C. Jomoc, DDM-ET\n\nFull-time instructors:\nXaviera Colleen De Paz, Jazfer Jadd Sala, Angeline Manliguez, Euzarn Cuaton, Wayne Clerigo, Perlita Gerona, Eva Palero, Rachel Mamado, Trisha Louraine De La Torre\n\nPart-time instructors:\nJovanni Christian Plateros, Ruby De la Torre, Paz Belen Mariño, Rafael Bachanicha, Fr. Allan Igbalic, Fr. Emerson Nazareth, Fr. Mark Ortega",
+      tagalog: "Ang aming Dean: Rosalinda C. Jomoc, DDM-ET\n\nFull-time instructors:\nXaviera Colleen De Paz, Jazfer Jadd Sala, Angeline Manliguez, Euzarn Cuaton, Wayne Clerigo, Perlita Gerona, Eva Palero, Rachel Mamado, Trisha Louraine De La Torre\n\nPart-time instructors:\nJovanni Christian Plateros, Ruby De la Torre, Paz Belen Mariño, Rafael Bachanicha, Fr. Allan Igbalic, Fr. Emerson Nazareth, Fr. Mark Ortega"
     },
     LOCATION: {
-      english: "We're located at Saint Joseph College\nTunga-Tunga, Maasin City, Southern Leyte",
-      bisaya: "Naa mi sa Saint Joseph College\nTunga-Tunga, Maasin City, Southern Leyte",
-      tagalog: "Nandito kami sa Saint Joseph College\nTunga-Tunga, Maasin City, Southern Leyte"
+      english: "📍 We're located at:\nSaint Joseph College\nTunga-Tunga, Maasin City\nSouthern Leyte",
+      bisaya: "📍 Naa mi sa:\nSaint Joseph College\nTunga-Tunga, Maasin City\nSouthern Leyte",
+      tagalog: "📍 Nandito kami sa:\nSaint Joseph College\nTunga-Tunga, Maasin City\nSouthern Leyte"
     }
   };
 
-  // Get user's last detected language from memory (default to English)
-  const language = 'english'; // You can implement language memory per user
   const response = responses[payload]?.[language] || responses[payload]?.english;
 
   if (response) {
+    console.log(`✅ Postback handled: ${payload} in ${language}`);
     sendMessage(sender_psid, response, language);
+  } else {
+    console.error(`❌ Unknown payload: ${payload}`);
   }
 }
 
-// Handle incoming messages
+// Handle incoming messages - FIXED VERSION
 async function handleMessage(sender_psid, text) {
   const textLower = text.toLowerCase();
   const language = detectLanguage(text);
+  
+  // Store user's language preference
+  userLanguages.set(sender_psid, language);
+  
+  console.log(`📨 Message from ${sender_psid}: "${text}" (detected: ${language})`);
 
   // Welcome message
   if (textLower.includes("hello") || textLower.includes("hi") || textLower.includes("hey") || 
       textLower.includes("start") || textLower.includes("kumusta") || textLower.includes("musta") ||
-      textLower.includes("kamusta")) {
+      textLower.includes("kamusta") || textLower === "get started") {
     
     const welcomeMessages = {
       english: "Hello! I'm Hestia, your Tourism & Hospitality Department assistant at Saint Joseph College.\n\nHow can I help you today?",
@@ -283,19 +306,63 @@ async function handleMessage(sender_psid, text) {
   }
 
   // Try to get response from Gemini AI first
+  console.log("🤖 Calling Gemini AI...");
   const geminiResponse = await callGeminiAI(text, language);
   
   if (geminiResponse) {
+    console.log("✅ Using Gemini AI response");
     sendMessage(sender_psid, geminiResponse, language);
   } else {
-    // Fallback to default response if Gemini fails
-    const fallbackMessages = {
-      english: "Thank you for your question! I'm here to help you learn more about our Tourism & Hospitality programs at Saint Joseph College.\n\nPlease use the quick reply buttons below to explore specific topics.",
-      bisaya: "Salamat sa inyong pangutana! Naa ko dinhi aron matabangan mo sa pagkat-on bahin sa among Tourism & Hospitality programs sa Saint Joseph College.\n\nPalihug gamita ang mga quick reply buttons sa ubos para sa specific topics.",
-      tagalog: "Salamat sa inyong tanong! Nandito ako upang matulungan kayo sa pag-aaral tungkol sa aming Tourism & Hospitality programs sa Saint Joseph College.\n\nPakiusap gamitin ang mga quick reply buttons sa ibaba para sa specific topics."
+    // Fallback to keyword-based responses
+    console.log("⚠️ Gemini failed, using keyword matching");
+    
+    const keywordResponses = {
+      english: {
+        programs: "We offer BSTM (Tourism Management) and BSHM (Hospitality Management). Click 'Programs' below for details!",
+        cost: "Additional costs include lab uniforms, culinary ingredients, event fees, and OJT requirements. Click 'Costs' for more info!",
+        location: "We're at Saint Joseph College, Tunga-Tunga, Maasin City, Southern Leyte. Click 'Location' below!",
+        instructor: "We have excellent full-time and part-time instructors. Click 'Instructors' to see the list!",
+        thesis: "Yes, thesis is required in 3rd or 4th year. Click 'Thesis' for details!",
+        career: "Great career opportunities in tourism and hospitality! Click 'Careers' to learn more!",
+        default: "I'm here to help! Please use the quick reply buttons below to explore specific topics about our Tourism & Hospitality programs."
+      },
+      bisaya: {
+        programs: "Nag-offer mi og BSTM (Tourism Management) ug BSHM (Hospitality Management). Click 'Mga Programa' sa ubos para sa detalye!",
+        cost: "Additional costs naglakip sa lab uniforms, culinary ingredients, event fees, ug OJT requirements. Click 'Mga Gasto'!",
+        location: "Naa mi sa Saint Joseph College, Tunga-Tunga, Maasin City, Southern Leyte. Click 'Lokasyon'!",
+        instructor: "Adunay mi maayo nga instructors. Click 'Instructors' para makita ang lista!",
+        thesis: "Oo, kinahanglan ang thesis sa 3rd o 4th year. Click 'Thesis' para sa detalye!",
+        career: "Daghan og career opportunities sa tourism ug hospitality! Click 'Trabaho'!",
+        default: "Naa ko dinhi aron matabangan ka! Palihug gamita ang mga quick reply buttons sa ubos."
+      },
+      tagalog: {
+        programs: "Nag-aalok kami ng BSTM (Tourism Management) at BSHM (Hospitality Management). Click 'Mga Programa' para sa detalye!",
+        cost: "Karagdagang gastos ay kinabibilangan ng lab uniforms, culinary ingredients, event fees, at OJT requirements. Click 'Mga Gastos'!",
+        location: "Nandito kami sa Saint Joseph College, Tunga-Tunga, Maasin City, Southern Leyte. Click 'Lokasyon'!",
+        instructor: "Mayroon kaming mahusay na instructors. Click 'Instructors' para makita ang lista!",
+        thesis: "Oo, kailangan ang thesis sa 3rd o 4th year. Click 'Thesis' para sa detalye!",
+        career: "Maraming career opportunities sa tourism at hospitality! Click 'Trabaho'!",
+        default: "Nandito ako para tumulong! Pakiusap gamitin ang mga quick reply buttons sa ibaba."
+      }
     };
     
-    sendMessage(sender_psid, fallbackMessages[language], language);
+    // Simple keyword matching
+    let response = keywordResponses[language].default;
+    if (textLower.includes("program") || textLower.includes("course") || textLower.includes("bstm") || textLower.includes("bshm")) {
+      response = keywordResponses[language].programs;
+    } else if (textLower.includes("cost") || textLower.includes("gasto") || textLower.includes("bayad") || textLower.includes("gastos")) {
+      response = keywordResponses[language].cost;
+    } else if (textLower.includes("location") || textLower.includes("lokasyon") || textLower.includes("asa") || textLower.includes("saan")) {
+      response = keywordResponses[language].location;
+    } else if (textLower.includes("instructor") || textLower.includes("teacher") || textLower.includes("professor")) {
+      response = keywordResponses[language].instructor;
+    } else if (textLower.includes("thesis")) {
+      response = keywordResponses[language].thesis;
+    } else if (textLower.includes("career") || textLower.includes("job") || textLower.includes("work") || textLower.includes("trabaho")) {
+      response = keywordResponses[language].career;
+    }
+    
+    sendMessage(sender_psid, response, language);
   }
 }
 
@@ -315,28 +382,33 @@ function sendMessage(sender_psid, text, language) {
   callSendAPI(sender_psid, response);
 }
 
-// Send API call
-function callSendAPI(sender_psid, response) {
+// Send API call - FIXED VERSION using fetch instead of request
+async function callSendAPI(sender_psid, response) {
   const request_body = {
     recipient: { id: sender_psid },
     message: response,
   };
 
-  request(
-    {
-      uri: "https://graph.facebook.com/v19.0/me/messages",
-      qs: { access_token: PAGE_ACCESS_TOKEN },
-      method: "POST",
-      json: request_body,
-    },
-    (err, res, body) => {
-      if (err) {
-        console.error("❌ Unable to send message:", err);
-      } else if (body.error) {
-        console.error("❌ Facebook API error:", body.error);
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request_body)
       }
+    );
+
+    const data = await res.json();
+    
+    if (data.error) {
+      console.error("❌ Facebook API error:", data.error);
+    } else {
+      console.log("✅ Message sent successfully");
     }
-  );
+  } catch (err) {
+    console.error("❌ Unable to send message:", err);
+  }
 }
 
 const PORT = process.env.PORT || 10000;
@@ -347,7 +419,9 @@ app.listen(PORT, () => {
   if (GEMINI_API_KEY) {
     console.log(`🤖 Gemini AI integration active`);
   } else {
-    console.log(`⚠️  Gemini AI key not set - using fallback responses`);
+    console.log(`⚠️  Gemini AI key not set - using keyword-based responses`);
   }
-
+  if (!PAGE_ACCESS_TOKEN) {
+    console.error(`❌ PAGE_ACCESS_TOKEN not set! Bot will not work.`);
+  }
 });
