@@ -158,14 +158,29 @@ app.post("/webhook", async (req, res) => {
 
 // Language detection
 function detectLanguage(text) {
-  const bisayaKeywords = ['kumusta', 'musta', 'unsa', 'asa', 'kanus-a', 'ngano', 'kinsa', 'unsaon', 'pila', 'naa', 'wala', 'adunay', 'karon'];
-  const tagalogKeywords = ['kamusta', 'ano', 'saan', 'kailan', 'bakit', 'sino', 'paano', 'ilan', 'mga', 'ang', 'ng', 'sa', 'may', 'ngayon'];
+  const bisayaKeywords = ['kumusta', 'musta', 'unsa', 'asa', 'kanus-a', 'ngano', 'kinsa', 'unsaon', 'pila', 'naa', 'wala', 'adunay', 'karon', 'ug', 'sa', 'nga'];
+  const tagalogKeywords = ['kamusta', 'ano', 'saan', 'kailan', 'bakit', 'sino', 'paano', 'ilan', 'mga', 'ng', 'may', 'ngayon', 'at'];
   
   const textLower = text.toLowerCase();
-  const isBisaya = bisayaKeywords.some(k => textLower.includes(k));
-  const isTagalog = !isBisaya && tagalogKeywords.some(k => textLower.includes(k));
   
-  return isBisaya ? 'bisaya' : isTagalog ? 'tagalog' : 'english';
+  // Count keyword matches
+  let bisayaCount = 0;
+  let tagalogCount = 0;
+  
+  bisayaKeywords.forEach(k => {
+    if (textLower.includes(k)) bisayaCount++;
+  });
+  
+  tagalogKeywords.forEach(k => {
+    if (textLower.includes(k)) tagalogCount++;
+  });
+  
+  // Need at least 2 keyword matches to switch from English
+  if (bisayaCount >= 2) return 'bisaya';
+  if (tagalogCount >= 2) return 'tagalog';
+  
+  // Default to English for ambiguous or single-word queries
+  return 'english';
 }
 
 // Get quick replies based on language
@@ -332,7 +347,14 @@ YOUR RESPONSE:`;
 
 // Handle postback (quick reply clicks)
 async function handlePostback(sender_psid, payload) {
-  const language = userLanguages.get(sender_psid) || 'english';
+  // For postback, maintain user's language but default to English if not explicitly set
+  let language = userLanguages.get(sender_psid);
+  
+  // If no language preference or it was auto-detected incorrectly, use English
+  if (!language) {
+    language = 'english';
+    userLanguages.set(sender_psid, language);
+  }
   
   console.log(`🔘 Postback received: ${payload} from ${sender_psid} (lang: ${language})`);
   
@@ -403,11 +425,22 @@ async function handlePostback(sender_psid, payload) {
 // Handle incoming messages
 async function handleMessage(sender_psid, text) {
   const textLower = text.toLowerCase();
-  const language = detectLanguage(text);
+  const detectedLanguage = detectLanguage(text);
   
-  userLanguages.set(sender_psid, language);
+  // Only update language preference if it's a clear language indicator
+  // For single words or ambiguous text, keep existing preference or default to English
+  const currentLanguage = userLanguages.get(sender_psid);
+  let language = detectedLanguage;
   
-  console.log(`📨 Message from ${sender_psid}: "${text}" (detected: ${language})`);
+  // If user already has a language set and the new message is ambiguous (like "training", "hello", etc.)
+  // keep their existing preference
+  if (currentLanguage && text.split(' ').length <= 2 && detectedLanguage === 'english') {
+    language = currentLanguage;
+  } else {
+    userLanguages.set(sender_psid, language);
+  }
+  
+  console.log(`📨 Message from ${sender_psid}: "${text}" (detected: ${detectedLanguage}, using: ${language})`);
 
   // Welcome message
   if (textLower.match(/^(hello|hi|hey|start|kumusta|musta|kamusta|get started)$/i)) {
