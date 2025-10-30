@@ -1,5 +1,5 @@
-// Enhanced Tourism Chatbot with Gemini AI Integration - MERGED VERSION
-// Features: Quick Replies, Multi-language Support, AI-powered responses with Gemini 1.5 Pro
+// Enhanced Tourism Chatbot with Gemini AI Integration - FIXED VERSION
+// Features: Quick Replies, Multi-language Support, AI-powered responses with FREE Gemini API
 
 import express from "express";
 import bodyParser from "body-parser";
@@ -110,7 +110,6 @@ app.post("/webhook", async (req, res) => {
           }
         } catch (error) {
           console.error(`❌ Error processing event for ${sender}:`, error);
-          // Send error message to user
           await sendTextMessage(sender, "Sorry, I encountered an error. Please try again.");
         }
       }
@@ -176,7 +175,7 @@ function getQuickReplies(language) {
   return replies[language] || replies.english;
 }
 
-// Call Gemini AI using Gemini 1.5 Pro
+// Call Gemini AI using FREE Gemini 1.5 Flash
 async function callGeminiAI(userMessage, language) {
   if (!GEMINI_API_KEY) {
     console.log("⚠️ Gemini API key not set, using fallback");
@@ -198,14 +197,13 @@ User question: ${userMessage}
 Response:`;
 
   try {
-    // Use v1 endpoint with gemini-1.5-flash-latest for free API
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+    // FIXED: Use correct model name for FREE API - gemini-1.5-flash
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
     
     console.log(`🤖 Calling Gemini 1.5 Flash for: "${userMessage}"`);
     
     const response = await axios.post(url, {
       contents: [{
-        role: "user",
         parts: [{ text: prompt }]
       }],
       generationConfig: {
@@ -232,6 +230,8 @@ Response:`;
           threshold: "BLOCK_MEDIUM_AND_ABOVE"
         }
       ]
+    }, {
+      timeout: 10000 // 10 second timeout
     });
 
     if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
@@ -243,7 +243,14 @@ Response:`;
       return null;
     }
   } catch (error) {
-    console.error("❌ Gemini API error:", error.response?.data || error.message);
+    if (error.code === 'ECONNABORTED') {
+      console.error("❌ Gemini API timeout - request took too long");
+    } else if (error.response) {
+      console.error("❌ Gemini API error:", error.response.data);
+      console.error("Status code:", error.response.status);
+    } else {
+      console.error("❌ Gemini API error:", error.message);
+    }
     return null;
   }
 }
@@ -466,7 +473,6 @@ async function callSendAPI(sender_psid, response) {
       console.error("Error code:", res.data.error.code);
       console.error("Error message:", res.data.error.message);
       
-      // Check for specific errors
       if (res.data.error.code === 190) {
         console.error("🔑 ACCESS TOKEN ERROR: Your PAGE_ACCESS_TOKEN is invalid or expired!");
       } else if (res.data.error.code === 100) {
@@ -477,7 +483,6 @@ async function callSendAPI(sender_psid, response) {
     }
   } catch (err) {
     console.error("❌ Unable to send message:", err.response?.data || err.message);
-    console.error("Stack trace:", err.stack);
   }
 }
 
@@ -486,10 +491,12 @@ app.get("/", (req, res) => {
   res.json({
     status: "running",
     bot: "Hestia Tourism Assistant",
-    version: "3.0.0-merged",
-    gemini_model: "gemini-1.5-flash-latest",
+    version: "3.1.0-fixed",
+    gemini_model: "gemini-1.5-flash (FREE)",
+    gemini_api_version: "v1beta",
     gemini_enabled: !!GEMINI_API_KEY,
-    page_token_set: !!PAGE_ACCESS_TOKEN
+    page_token_set: !!PAGE_ACCESS_TOKEN,
+    fix_applied: "Corrected model name and API endpoint"
   });
 });
 
@@ -500,23 +507,27 @@ app.get("/test", (req, res) => {
     page_access_token_set: !!PAGE_ACCESS_TOKEN,
     gemini_api_key_set: !!GEMINI_API_KEY,
     environment: process.env.NODE_ENV || "development",
-    gemini_model: "gemini-1.5-flash-latest"
+    gemini_model: "gemini-1.5-flash",
+    gemini_api_version: "v1beta",
+    fix_status: "Model name corrected from gemini-1.5-flash-latest to gemini-1.5-flash"
   });
 });
 
 const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
-  console.log("\n" + "=".repeat(50));
-  console.log(`🚀 Hestia Tourism Bot Server Started`);
-  console.log("=".repeat(50));
+  console.log("\n" + "=".repeat(60));
+  console.log(`🚀 Hestia Tourism Bot Server Started - FIXED VERSION`);
+  console.log("=".repeat(60));
   console.log(`📡 Server running on port: ${PORT}`);
   console.log(`🌐 Webhook endpoint: /webhook`);
   console.log(`✅ Verify token set: ${!!VERIFY_TOKEN}`);
   console.log(`✅ Page access token set: ${!!PAGE_ACCESS_TOKEN}`);
   console.log(`🤖 Gemini AI enabled: ${!!GEMINI_API_KEY}`);
-  console.log(`🧠 Gemini Model: gemini-pro (free API)`);
-  console.log("=".repeat(50) + "\n");
+  console.log(`🧠 Gemini Model: gemini-1.5-flash (FREE API)`);
+  console.log(`🔧 API Version: v1beta (correct endpoint)`);
+  console.log(`✨ Fix Applied: Model name and endpoint corrected`);
+  console.log("=".repeat(60) + "\n");
   
   if (!PAGE_ACCESS_TOKEN) {
     console.error("⚠️  WARNING: PAGE_ACCESS_TOKEN not set!");
@@ -527,5 +538,9 @@ app.listen(PORT, () => {
   if (!GEMINI_API_KEY) {
     console.error("⚠️  WARNING: GEMINI_API_KEY not set!");
     console.error("⚠️  Bot will use fallback keyword matching only.\n");
+  } else {
+    console.log("✅ Gemini AI is ready to use!");
+    console.log("📝 Using FREE tier model: gemini-1.5-flash");
+    console.log("🌐 Endpoint: https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent\n");
   }
 });
