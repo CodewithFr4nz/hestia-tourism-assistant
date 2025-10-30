@@ -154,7 +154,7 @@ function getQuickReplies(language) {
   return replies[language] || replies.english;
 }
 
-// Call Gemini AI - FIXED VERSION
+// Call Gemini AI - FIXED VERSION with correct endpoint
 async function callGeminiAI(userMessage, language) {
   if (!GEMINI_API_KEY) {
     console.log("⚠️ Gemini API key not set, using fallback");
@@ -176,13 +176,16 @@ User question: ${userMessage}
 Response:`;
 
   try {
+    // Updated to use gemini-1.5-flash (latest stable model)
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
+          contents: [{
+            parts: [{ text: prompt }]
+          }],
           generationConfig: {
             temperature: 0.7,
             maxOutputTokens: 200,
@@ -192,7 +195,8 @@ Response:`;
     );
 
     if (!response.ok) {
-      console.error(`❌ Gemini API HTTP error: ${response.status}`);
+      const errorText = await response.text();
+      console.error(`❌ Gemini API HTTP error: ${response.status} - ${errorText}`);
       return null;
     }
 
