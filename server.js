@@ -83,21 +83,23 @@ app.get("/webhook", (req, res) => {
 app.post("/webhook", (req, res) => {
   const body = req.body;
 
-  if (body.object === "page") {
-    body.entry.forEach((entry) => {
-      const event = entry.messaging[0];
+if (body.object === "page") {
+  body.entry.forEach((entry) => {
+    // Loop through all messaging events instead of only [0]
+    entry.messaging.forEach((event) => {
       const sender = event.sender.id;
-      
+
       if (event.message && event.message.text) {
         handleMessage(sender, event.message.text);
       } else if (event.postback) {
         handlePostback(sender, event.postback.payload);
       }
     });
-    res.status(200).send("EVENT_RECEIVED");
-  } else {
-    res.sendStatus(404);
-  }
+  });
+  res.status(200).send("EVENT_RECEIVED");
+} else {
+  res.sendStatus(404);
+}
 });
 
 // Language detection
@@ -347,4 +349,5 @@ app.listen(PORT, () => {
   } else {
     console.log(`⚠️  Gemini AI key not set - using fallback responses`);
   }
+
 });
