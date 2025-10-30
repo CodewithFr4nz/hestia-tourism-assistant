@@ -26,19 +26,19 @@ if (!GEMINI_API_KEY) {
 // AI Model Configuration with multiple fallback models
 const AI_MODELS = [
   {
-    name: 'gemini-2.0-flash-exp',
+    name: 'gemini-2.5-flash',
     type: 'gemini',
     maxRequests: 15,
     enabled: true
   },
   {
-    name: 'gemini-1.5-flash',
+    name: 'gemini-2.5-flash-lite',
     type: 'gemini',
     maxRequests: 15,
     enabled: true
   },
   {
-    name: 'gemini-1.5-flash-8b',
+    name: 'gemini-2.0-flash-001',
     type: 'gemini',
     maxRequests: 15,
     enabled: true
