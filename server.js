@@ -198,10 +198,10 @@ User question: ${userMessage}
 Response:`;
 
   try {
-    // Use v1 endpoint with gemini-pro for free API
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+    // Use v1 endpoint with gemini-1.5-flash-latest for free API
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
     
-    console.log(`🤖 Calling Gemini Pro for: "${userMessage}"`);
+    console.log(`🤖 Calling Gemini 1.5 Flash for: "${userMessage}"`);
     
     const response = await axios.post(url, {
       contents: [{
@@ -487,7 +487,7 @@ app.get("/", (req, res) => {
     status: "running",
     bot: "Hestia Tourism Assistant",
     version: "3.0.0-merged",
-    gemini_model: "gemini-1.5-pro",
+    gemini_model: "gemini-1.5-flash-latest",
     gemini_enabled: !!GEMINI_API_KEY,
     page_token_set: !!PAGE_ACCESS_TOKEN
   });
@@ -500,7 +500,7 @@ app.get("/test", (req, res) => {
     page_access_token_set: !!PAGE_ACCESS_TOKEN,
     gemini_api_key_set: !!GEMINI_API_KEY,
     environment: process.env.NODE_ENV || "development",
-    gemini_model: "gemini-1.5-pro"
+    gemini_model: "gemini-1.5-flash-latest"
   });
 });
 
@@ -515,7 +515,7 @@ app.listen(PORT, () => {
   console.log(`✅ Verify token set: ${!!VERIFY_TOKEN}`);
   console.log(`✅ Page access token set: ${!!PAGE_ACCESS_TOKEN}`);
   console.log(`🤖 Gemini AI enabled: ${!!GEMINI_API_KEY}`);
-  console.log(`🧠 Gemini Model: gemini-1.5-pro`);
+  console.log(`🧠 Gemini Model: gemini-pro (free API)`);
   console.log("=".repeat(50) + "\n");
   
   if (!PAGE_ACCESS_TOKEN) {
